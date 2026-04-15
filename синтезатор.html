@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Синтезатор с кнопками</title>
+<style>
+  body { font-family: sans-serif; margin: 1em; background: #222; color: #eee; }
+  h1 { margin-bottom: 0.5em; }
+  #waveType { margin-bottom: 1em; }
+  #buttons { display: flex; flex-wrap: wrap; gap: 0.5em; }
+  button.tone-btn {
+    padding: 0.6em 1em;
+    background: #444;
+    border: none;
+    border-radius: 4px;
+    color: #eee;
+    cursor: pointer;
+    user-select: none;
+    min-width: 70px;
+    text-align: center;
+    transition: background-color 0.15s;
+  }
+  button.tone-btn.active {
+    background: #0a0;
+    color: #0f0;
+  }
+  button.tone-btn:hover {
+    background: #666;
+  }
+  #addFreqForm {
+    margin-top: 1em;
+    display: flex;
+    gap: 0.5em;
+    flex-wrap: wrap;
+  }
+  #addFreqForm input, #addFreqForm button {
+    font-size: 1em;
+    padding: 0.4em;
+    border-radius: 4px;
+    border: none;
+  }
+  #addFreqForm input[type="number"] {
+    width: 100px;
+  }
+  #addFreqForm button {
+    background: #06c;
+    color: white;
+    cursor: pointer;
+    min-width: 80px;
+  }
+  #addFreqForm button:hover {
+    background: #09f;
+  }
+</style>
+</head>
+<body>
+
+<h1>Мини-синтезатор</h1>
+
+<label for="waveType">Форма волны: </label>
+<select id="waveType">
+  <option value="sine">Sine (синус)</option>
+  <option value="square">Square (квадрат)</option>
+  <option value="triangle">Triangle (треугольник)</option>
+  <option value="sawtooth">Sawtooth (пилообразный)</option>
+</select>
+
+<div id="buttons">
+  <!-- Кнопки с частотами появятся здесь -->
+</div>
+
+<form id="addFreqForm" onsubmit="return false;">
+  <input type="number" id="freqInput" min="20" max="20000" step="1" value="440" required />
+  <button id="addBtn">Добавить частоту</button>
+</form>
+
+<script>
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const buttonsDiv = document.getElementById('buttons');
+  const waveTypeSelect = document.getElementById('waveType');
+  const freqInput = document.getElementById('freqInput');
+  const addBtn = document.getElementById('addBtn');
+
+  // Хранение включённых осцилляторов: key = frequency, value = {oscillator, gainNode, button}
+  const activeOscillators = new Map();
+
+  // Создаём кнопку с заданной частотой
+  function createToneButton(freq) {
+    const btn = document.createElement('button');
+    btn.className = 'tone-btn';
+    btn.textContent = freq + ' Hz';
+    btn.dataset.freq = freq;
+
+    btn.addEventListener('click', () => {
+      const frequency = parseFloat(btn.dataset.freq);
+      if (activeOscillators.has(frequency)) {
+        // Уже включено — выключить
+        stopTone(frequency);
+        btn.classList.remove('active');
+      } else {
+        // Включить
+        playTone(frequency);
+        btn.classList.add('active');
+      }
+    });
+
+    btn.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      // При правом клике — редактировать частоту
+      const newFreqStr = prompt('Изменить частоту (20 - 20000 Hz):', btn.dataset.freq);
+      if (newFreqStr !== null) {
+        const newFreq = parseFloat(newFreqStr);
+        if (isNaN(newFreq) || newFreq < 20 || newFreq > 20000) {
+          alert('Неверное значение частоты!');
+          return;
+        }
+        if (activeOscillators.has(btn.dataset.freq)) {
+          // если сейчас играет, остановим старую частоту
+          stopTone(parseFloat(btn.dataset.freq));
+        }
+        btn.dataset.freq = newFreq;
+        btn.textContent = newFreq + ' Hz';
+        // автоматически выключаем кнопку при изменении частоты
+        btn.classList.remove('active');
+      }
+    });
+
+    // Двойной клик — удалить кнопку
+    btn.addEventListener('dblclick', () => {
+      if (activeOscillators.has(btn.dataset.freq)) {
+        stopTone(parseFloat(btn.dataset.freq));
+      }
+      buttonsDiv.removeChild(btn);
+    });
+
+    return btn;
+  }
+
+  // Воспроизведение тона с частотой freq
+  function playTone(freq) {
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+
+    osc.type = waveTypeSelect.value;
+    osc.frequency.value = freq;
+
+    gainNode.gain.value = 0.1; // громкость
+
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    osc.start();
+
+    activeOscillators.set(freq, {oscillator: osc, gainNode: gainNode});
+  }
+
+  // Остановка тона с частотой freq
+  function stopTone(freq) {
+    const obj = activeOscillators.get(freq);
+    if (!obj) return;
+    obj.oscillator.stop();
+    obj.oscillator.disconnect();
+    obj.gainNode.disconnect();
+    activeOscillators.delete(freq);
+  }
+
+  // Добавление новой кнопки с частотой из инпута
+  addBtn.onclick = () => {
+    const freq = parseFloat(freqInput.value);
+    if (freq < 20 || freq > 20000 || isNaN(freq)) {
+      alert('Введите частоту от 20 до 20000 Hz');
+      return;
+    }
+    // Проверяем на дублирование частоты
+    const exists = [...buttonsDiv.children].some(btn => btn.dataset.freq === freq.toString());
+    if (exists) {
+      alert('Кнопка с этой частотой уже существует');
+      return;
+    }
+    const btn = createToneButton(freq);
+    buttonsDiv.appendChild(btn);
+    freqInput.value = 440;
+  };
+
+  // Начальные кнопки
+  [261.63, 329.63, 392, 440, 523.25].forEach(freq => {
+    const btn = createToneButton(freq);
+    buttonsDiv.appendChild(btn);
+  });
+
+  // Автоматически обновляем тип волны у играющих осцилляторов при смене select
+  waveTypeSelect.addEventListener('change', () => {
+    const newType = waveTypeSelect.value;
+    for (const {oscillator} of activeOscillators.values()) {
+      oscillator.type = newType;
+    }
+  });
+</script>
+
+<p style="font-size:0.8em; margin-top:1em; color:#888;">
+* Клик по кнопке — вкл/выкл звук (поддержка нескольких одновременно)<br>
+* Правый клик — редактировать частоту<br>
+* Двойной клик — удалить кнопку<br>
+* Можно менять форму волны в выпадающем списке
+</p>
+
+</body>
+</html>
