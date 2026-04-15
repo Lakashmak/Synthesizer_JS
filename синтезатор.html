@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Синтезатор с кнопками</title>
+<title>Синтезатор с режимами нажатия</title>
 <style>
   body { font-family: sans-serif; margin: 1em; background: #222; color: #eee; }
   h1 { margin-bottom: 0.5em; }
-  #waveType { margin-bottom: 1em; }
+  #waveType, #modeSelect { margin-bottom: 1em; margin-right: 0.5em; }
   #buttons { display: flex; flex-wrap: wrap; gap: 0.5em; }
   button.tone-btn {
     padding: 0.6em 1em;
@@ -52,11 +52,14 @@
   #addFreqForm button:hover {
     background: #09f;
   }
+  label {
+    user-select: none;
+  }
 </style>
 </head>
 <body>
 
-<h1>Мини-синтезатор</h1>
+<h1>Мини-синтезатор с режимами</h1>
 
 <label for="waveType">Форма волны: </label>
 <select id="waveType">
@@ -64,6 +67,13 @@
   <option value="square">Square (квадрат)</option>
   <option value="triangle">Triangle (треугольник)</option>
   <option value="sawtooth">Sawtooth (пилообразный)</option>
+</select>
+
+<label for="modeSelect">Режим нажатия: </label>
+<select id="modeSelect" title="Выбери режим по клику">
+  <option value="play">Воспроизведение</option>
+  <option value="edit">Редактирование</option>
+  <option value="delete">Удаление</option>
 </select>
 
 <div id="buttons">
@@ -79,11 +89,26 @@
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const buttonsDiv = document.getElementById('buttons');
   const waveTypeSelect = document.getElementById('waveType');
+  const modeSelect = document.getElementById('modeSelect');
   const freqInput = document.getElementById('freqInput');
   const addBtn = document.getElementById('addBtn');
 
-  // Хранение включённых осцилляторов: key = frequency, value = {oscillator, gainNode, button}
+  // Хранение включённых осцилляторов: key = frequency, value = {oscillator, gainNode}
   const activeOscillators = new Map();
+
+  // Остановить все осцилляторы и очистить активные
+  function stopAllTones() {
+    for (const freq of activeOscillators.keys()) {
+      stopTone(freq);
+      const btn = findButtonByFreq(freq);
+      if (btn) btn.classList.remove('active');
+    }
+  }
+
+  // Найти кнопку по частоте
+  function findButtonByFreq(freq) {
+    return [...buttonsDiv.children].find(btn => parseFloat(btn.dataset.freq) === freq);
+  }
 
   // Создаём кнопку с заданной частотой
   function createToneButton(freq) {
@@ -94,44 +119,46 @@
 
     btn.addEventListener('click', () => {
       const frequency = parseFloat(btn.dataset.freq);
-      if (activeOscillators.has(frequency)) {
-        // Уже включено — выключить
-        stopTone(frequency);
-        btn.classList.remove('active');
-      } else {
-        // Включить
-        playTone(frequency);
-        btn.classList.add('active');
-      }
-    });
+      const mode = modeSelect.value;
 
-    btn.addEventListener('contextmenu', e => {
-      e.preventDefault();
-      // При правом клике — редактировать частоту
-      const newFreqStr = prompt('Изменить частоту (20 - 20000 Hz):', btn.dataset.freq);
-      if (newFreqStr !== null) {
-        const newFreq = parseFloat(newFreqStr);
-        if (isNaN(newFreq) || newFreq < 20 || newFreq > 20000) {
-          alert('Неверное значение частоты!');
-          return;
+      if (mode === 'play') {
+        if (activeOscillators.has(frequency)) {
+          stopTone(frequency);
+          btn.classList.remove('active');
+        } else {
+          playTone(frequency);
+          btn.classList.add('active');
         }
-        if (activeOscillators.has(btn.dataset.freq)) {
-          // если сейчас играет, остановим старую частоту
-          stopTone(parseFloat(btn.dataset.freq));
+      } else if (mode === 'edit') {
+        const newFreqStr = prompt('Изменить частоту (20 - 20000 Hz):', btn.dataset.freq);
+        if (newFreqStr !== null) {
+          const newFreq = parseFloat(newFreqStr);
+          if (isNaN(newFreq) || newFreq < 20 || newFreq > 20000) {
+            alert('Неверное значение частоты!');
+            return;
+          }
+          if (activeOscillators.has(frequency)) {
+            stopTone(frequency);
+            btn.classList.remove('active');
+          }
+          // Проверка дубликатов
+          const exists = [...buttonsDiv.children].some(otherBtn =>
+            otherBtn !== btn && parseFloat(otherBtn.dataset.freq) === newFreq
+          );
+          if (exists) {
+            alert('Кнопка с этой частотой уже существует');
+            return;
+          }
+          btn.dataset.freq = newFreq;
+          btn.textContent = newFreq + ' Hz';
         }
-        btn.dataset.freq = newFreq;
-        btn.textContent = newFreq + ' Hz';
-        // автоматически выключаем кнопку при изменении частоты
-        btn.classList.remove('active');
+      } else if (mode === 'delete') {
+        if (activeOscillators.has(frequency)) {
+          stopTone(frequency);
+          btn.classList.remove('active');
+        }
+        buttonsDiv.removeChild(btn);
       }
-    });
-
-    // Двойной клик — удалить кнопку
-    btn.addEventListener('dblclick', () => {
-      if (activeOscillators.has(btn.dataset.freq)) {
-        stopTone(parseFloat(btn.dataset.freq));
-      }
-      buttonsDiv.removeChild(btn);
     });
 
     return btn;
@@ -148,7 +175,7 @@
     osc.type = waveTypeSelect.value;
     osc.frequency.value = freq;
 
-    gainNode.gain.value = 0.1; // громкость
+    gainNode.gain.value = 0.1;
 
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
@@ -168,15 +195,31 @@
     activeOscillators.delete(freq);
   }
 
-  // Добавление новой кнопки с частотой из инпута
+  // При смене режима останавливаем все звуки
+  modeSelect.addEventListener('change', () => {
+    stopAllTones();
+    // Снимаем выделение со всех кнопок
+    for (const btn of buttonsDiv.children) {
+      btn.classList.remove('active');
+    }
+  });
+
+  // При смене типа волны меняем все играющие осцилляторы
+  waveTypeSelect.addEventListener('change', () => {
+    const newType = waveTypeSelect.value;
+    for (const {oscillator} of activeOscillators.values()) {
+      oscillator.type = newType;
+    }
+  });
+
+  // Добавление кнопки с частотой из поля
   addBtn.onclick = () => {
     const freq = parseFloat(freqInput.value);
     if (freq < 20 || freq > 20000 || isNaN(freq)) {
       alert('Введите частоту от 20 до 20000 Hz');
       return;
     }
-    // Проверяем на дублирование частоты
-    const exists = [...buttonsDiv.children].some(btn => btn.dataset.freq === freq.toString());
+    const exists = [...buttonsDiv.children].some(btn => parseFloat(btn.dataset.freq) === freq);
     if (exists) {
       alert('Кнопка с этой частотой уже существует');
       return;
@@ -186,26 +229,19 @@
     freqInput.value = 440;
   };
 
-  // Начальные кнопки
+  // Инициализация кнопок по умолчанию
   [261.63, 329.63, 392, 440, 523.25].forEach(freq => {
-    const btn = createToneButton(freq);
-    buttonsDiv.appendChild(btn);
-  });
-
-  // Автоматически обновляем тип волны у играющих осцилляторов при смене select
-  waveTypeSelect.addEventListener('change', () => {
-    const newType = waveTypeSelect.value;
-    for (const {oscillator} of activeOscillators.values()) {
-      oscillator.type = newType;
-    }
+    buttonsDiv.appendChild(createToneButton(freq));
   });
 </script>
 
 <p style="font-size:0.8em; margin-top:1em; color:#888;">
-* Клик по кнопке — вкл/выкл звук (поддержка нескольких одновременно)<br>
-* Правый клик — редактировать частоту<br>
-* Двойной клик — удалить кнопку<br>
-* Можно менять форму волны в выпадающем списке
+* Режим &quot;Воспроизведение&quot; — клик вкл/выкл звук (можно несколько звуков одновременно)<br>
+* Режим &quot;Редактирование&quot; — клик меняет частоту кнопки<br>
+* Режим &quot;Удаление&quot; — клик удаляет кнопку<br>
+* При смене режима все звуки прекращаются, выделения сбрасываются<br>
+* Добавляй частоты в поле ниже<br>
+* Можно сменить форму волны осциллятора сверху
 </p>
 
 </body>
