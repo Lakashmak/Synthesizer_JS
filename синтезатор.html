@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Синтезатор с расширенными режимами</title>
+<title>Синтезатор с частотами вместо нот</title>
 <style>
   body {
     font-family: sans-serif;
@@ -14,7 +14,7 @@
   h1 {
     margin-bottom: 0.5em;
   }
-  #waveType, #modeSelect {
+  #waveType, #waveType2, #waveType3, #waveType4, #modeSelect {
     margin-bottom: 1em;
     margin-right: 0.5em;
   }
@@ -73,30 +73,67 @@
 </head>
 <body>
 
-<h1>Синтезатор с расширенными режимами</h1>
+<h1>Уже нормальный синтезатор за который я наконец взялся своими руками</h1>
 
-<label for="waveType">Форма волны: </label>
+<label for="waveType">Форма волны 1: </label>
 <select id="waveType">
-  <option value="sine">Sine (синус)</option>
+  <option value="sine" selected>Sine (синус)</option>
   <option value="square">Square (квадрат)</option>
   <option value="triangle">Triangle (треугольник)</option>
   <option value="sawtooth">Sawtooth (пилообразный)</option>
 </select>
 
+<br><p></p>
+
+<label for="waveType2">Форма волны 2: </label>
+<select id="waveType2">
+  <option value="none">отключить (без звука)</option>
+  <option value="sine">Sine (синус)</option>
+  <option value="square" selected>Square (квадрат)</option>
+  <option value="triangle">Triangle (треугольник)</option>
+  <option value="sawtooth">Sawtooth (пилообразный)</option>
+</select>
+
+<br><p></p>
+
+<label for="waveType3">Форма волны 3: </label>
+<select id="waveType3">
+  <option value="none">отключить (без звука)</option>
+  <option value="sine">Sine (синус)</option>
+  <option value="square">Square (квадрат)</option>
+  <option value="triangle" selected>Triangle (треугольник)</option>
+  <option value="sawtooth">Sawtooth (пилообразный)</option>
+</select>
+
+<br><p></p>
+
+<label for="waveType4">Форма волны 4: </label>
+<select id="waveType4">
+  <option value="none">отключить (без звука)</option>
+  <option value="sine">Sine (синус)</option>
+  <option value="square">Square (квадрат)</option>
+  <option value="triangle">Triangle (треугольник)</option>
+  <option value="sawtooth" selected>Sawtooth (пилообразный)</option>
+</select>
+
+<br><p></p>
+
 <label for="modeSelect">Режим нажатия: </label>
 <select id="modeSelect" title="Выбери режим нажатия">
   <option value="play-toggle">Воспроизведение (зажатие / переключение)</option>
-  <option value="play-hold">Воспроизведение (только пока удерживаешь)</option>
+  <option value="play-hold" selected>Воспроизведение (только пока удерживаешь)</option>
   <option value="edit">Редактирование</option>
   <option value="delete">Удаление</option>
 </select>
+
+<br><p></p>
 
 <div id="buttons">
   <!-- Кнопки с частотами будут здесь -->
 </div>
 
 <form id="addFreqForm" onsubmit="return false;">
-  <input type="number" id="freqInput" min="1" max="20000" step="0.1" value="440" required />
+  <input type="number" id="freqInput" min="0" max="20000" step="0.1" value="400" required />
   <button id="addBtn">Добавить частоту</button>
 </form>
 
@@ -104,6 +141,9 @@
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   const buttonsDiv = document.getElementById('buttons');
   const waveTypeSelect = document.getElementById('waveType');
+  const waveTypeSelect2 = document.getElementById('waveType2');
+  const waveTypeSelect3 = document.getElementById('waveType3');
+  const waveTypeSelect4 = document.getElementById('waveType4');
   const modeSelect = document.getElementById('modeSelect');
   const freqInput = document.getElementById('freqInput');
   const addBtn = document.getElementById('addBtn');
@@ -130,16 +170,31 @@
       return; // Уже играет
     }
     const osc = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const osc3 = audioCtx.createOscillator();
+    const osc4 = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
 
     osc.type = waveTypeSelect.value;
+    osc2.type = waveTypeSelect2.value;
+    osc3.type = waveTypeSelect3.value;
+    osc4.type = waveTypeSelect4.value;
     osc.frequency.value = freq;
+    osc2.frequency.value = freq+1;
+    osc3.frequency.value = freq+2;
+    osc4.frequency.value = freq+3;
 
     gainNode.gain.value = 0.1;
 
     osc.connect(gainNode);
+    osc2.connect(gainNode);
+    osc3.connect(gainNode);
+    osc4.connect(gainNode);
     gainNode.connect(audioCtx.destination);
     osc.start();
+    if (waveTypeSelect2.value != "none") osc2.start();
+    if (waveTypeSelect3.value != "none") osc3.start();
+    if (waveTypeSelect4.value != "none") osc4.start();
 
     activeOscillators.set(freq.toString(), {oscillator: osc, gainNode: gainNode, button: btn});
     btn.classList.add('active');
@@ -259,11 +314,11 @@
   // Редактирование свойств кнопки (частота и цвет)
   function editButtonProperties(btn) {
     const oldFreq = parseFloat(btn.dataset.freq);
-    let newFreqStr = prompt('Изменить частоту (>= 1 Hz):', oldFreq);
+    let newFreqStr = prompt('Изменить частоту (>= 0 Hz):', oldFreq);
     if (newFreqStr !== null) {
       const newFreq = parseFloat(newFreqStr);
-      if (isNaN(newFreq) || newFreq < 1 || newFreq > 20000) {
-        alert('Неверное значение частоты! Допустимо от 1 до 20000 Hz');
+      if (isNaN(newFreq) || newFreq < 0 || newFreq > 20000) {
+        alert('Неверное значение частоты! Допустимо от 0 до 20000 Hz');
         return;
       }
       if (!freqEquals(newFreq, oldFreq)) {
@@ -309,8 +364,8 @@
   // Добавление новой кнопки из поля ввода
   addBtn.onclick = () => {
     const freq = parseFloat(freqInput.value);
-    if (freq < 1 || freq > 20000 || isNaN(freq)) {
-      alert('Введите частоту от 1 до 20000 Hz');
+    if (freq < 0 || freq > 20000 || isNaN(freq)) {
+      alert('Введите частоту от 0 до 20000 Hz');
       return;
     }
     if ([...buttonsDiv.children].some(btn => freqEquals(parseFloat(btn.dataset.freq), freq))) {
@@ -319,7 +374,7 @@
     }
     const btn = createToneButton(freq);
     insertButtonSorted(btn);
-    freqInput.value = "440";
+    freqInput.value = freq;
   };
 
   // При смене режима все звуки останавливаются
@@ -358,7 +413,7 @@
   }
 
   // Инициализация кнопок по умолчанию
-  [261.63, 329.63, 392, 440, 523.25].forEach(freq => {
+  [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325, 350, 375, 400, 425, 450, 475, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850, 875, 900].forEach(freq => {
     const btn = createToneButton(freq);
     insertButtonSorted(btn);
   });
