@@ -3,12 +3,26 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Синтезатор с режимами нажатия</title>
+<title>Синтезатор с расширенными режимами</title>
 <style>
-  body { font-family: sans-serif; margin: 1em; background: #222; color: #eee; }
-  h1 { margin-bottom: 0.5em; }
-  #waveType, #modeSelect { margin-bottom: 1em; margin-right: 0.5em; }
-  #buttons { display: flex; flex-wrap: wrap; gap: 0.5em; }
+  body {
+    font-family: sans-serif;
+    margin: 1em;
+    background: #222;
+    color: #eee;
+  }
+  h1 {
+    margin-bottom: 0.5em;
+  }
+  #waveType, #modeSelect {
+    margin-bottom: 1em;
+    margin-right: 0.5em;
+  }
+  #buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+  }
   button.tone-btn {
     padding: 0.6em 1em;
     background: #444;
@@ -59,7 +73,7 @@
 </head>
 <body>
 
-<h1>Мини-синтезатор с режимами</h1>
+<h1>Синтезатор с расширенными режимами</h1>
 
 <label for="waveType">Форма волны: </label>
 <select id="waveType">
@@ -70,18 +84,19 @@
 </select>
 
 <label for="modeSelect">Режим нажатия: </label>
-<select id="modeSelect" title="Выбери режим по клику">
-  <option value="play">Воспроизведение</option>
+<select id="modeSelect" title="Выбери режим нажатия">
+  <option value="play-toggle">Воспроизведение (зажатие / переключение)</option>
+  <option value="play-hold">Воспроизведение (только пока удерживаешь)</option>
   <option value="edit">Редактирование</option>
   <option value="delete">Удаление</option>
 </select>
 
 <div id="buttons">
-  <!-- Кнопки с частотами появятся здесь -->
+  <!-- Кнопки с частотами будут здесь -->
 </div>
 
 <form id="addFreqForm" onsubmit="return false;">
-  <input type="number" id="freqInput" min="20" max="20000" step="1" value="440" required />
+  <input type="number" id="freqInput" min="1" max="20000" step="0.1" value="440" required />
   <button id="addBtn">Добавить частоту</button>
 </form>
 
@@ -93,81 +108,26 @@
   const freqInput = document.getElementById('freqInput');
   const addBtn = document.getElementById('addBtn');
 
-  // Хранение включённых осцилляторов: key = frequency, value = {oscillator, gainNode}
+  // Активные осцилляторы: key = frequency (строка), value = {oscillator, gainNode, button}
   const activeOscillators = new Map();
 
-  // Остановить все осцилляторы и очистить активные
-  function stopAllTones() {
-    for (const freq of activeOscillators.keys()) {
-      stopTone(freq);
-      const btn = findButtonByFreq(freq);
-      if (btn) btn.classList.remove('active');
-    }
+  // Вспомогательная функция сравнения частот с учётом округления
+  function freqEquals(f1, f2) {
+    return Math.abs(f1 - f2) < 0.0001;
   }
 
   // Найти кнопку по частоте
   function findButtonByFreq(freq) {
-    return [...buttonsDiv.children].find(btn => parseFloat(btn.dataset.freq) === freq);
+    return [...buttonsDiv.children].find(btn => freqEquals(parseFloat(btn.dataset.freq), freq));
   }
 
-  // Создаём кнопку с заданной частотой
-  function createToneButton(freq) {
-    const btn = document.createElement('button');
-    btn.className = 'tone-btn';
-    btn.textContent = freq + ' Hz';
-    btn.dataset.freq = freq;
-
-    btn.addEventListener('click', () => {
-      const frequency = parseFloat(btn.dataset.freq);
-      const mode = modeSelect.value;
-
-      if (mode === 'play') {
-        if (activeOscillators.has(frequency)) {
-          stopTone(frequency);
-          btn.classList.remove('active');
-        } else {
-          playTone(frequency);
-          btn.classList.add('active');
-        }
-      } else if (mode === 'edit') {
-        const newFreqStr = prompt('Изменить частоту (20 - 20000 Hz):', btn.dataset.freq);
-        if (newFreqStr !== null) {
-          const newFreq = parseFloat(newFreqStr);
-          if (isNaN(newFreq) || newFreq < 20 || newFreq > 20000) {
-            alert('Неверное значение частоты!');
-            return;
-          }
-          if (activeOscillators.has(frequency)) {
-            stopTone(frequency);
-            btn.classList.remove('active');
-          }
-          // Проверка дубликатов
-          const exists = [...buttonsDiv.children].some(otherBtn =>
-            otherBtn !== btn && parseFloat(otherBtn.dataset.freq) === newFreq
-          );
-          if (exists) {
-            alert('Кнопка с этой частотой уже существует');
-            return;
-          }
-          btn.dataset.freq = newFreq;
-          btn.textContent = newFreq + ' Hz';
-        }
-      } else if (mode === 'delete') {
-        if (activeOscillators.has(frequency)) {
-          stopTone(frequency);
-          btn.classList.remove('active');
-        }
-        buttonsDiv.removeChild(btn);
-      }
-    });
-
-    return btn;
-  }
-
-  // Воспроизведение тона с частотой freq
-  function playTone(freq) {
+  // Запустить звук с частотой freq для кнопки btn
+  function playTone(freq, btn) {
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
+    }
+    if (activeOscillators.has(freq.toString())) {
+      return; // Уже играет
     }
     const osc = audioCtx.createOscillator();
     const gainNode = audioCtx.createGain();
@@ -179,32 +139,195 @@
 
     osc.connect(gainNode);
     gainNode.connect(audioCtx.destination);
-
     osc.start();
 
-    activeOscillators.set(freq, {oscillator: osc, gainNode: gainNode});
+    activeOscillators.set(freq.toString(), {oscillator: osc, gainNode: gainNode, button: btn});
+    btn.classList.add('active');
   }
 
-  // Остановка тона с частотой freq
+  // Остановить звук с частотой freq
   function stopTone(freq) {
-    const obj = activeOscillators.get(freq);
+    const key = freq.toString();
+    const obj = activeOscillators.get(key);
     if (!obj) return;
     obj.oscillator.stop();
     obj.oscillator.disconnect();
     obj.gainNode.disconnect();
-    activeOscillators.delete(freq);
+    obj.button.classList.remove('active');
+    activeOscillators.delete(key);
   }
 
-  // При смене режима останавливаем все звуки
+  // Остановить все звуки
+  function stopAllTones() {
+    for (const freqKey of [...activeOscillators.keys()]) {
+      stopTone(parseFloat(freqKey));
+    }
+  }
+
+  // Создать кнопку с частотой freq и цветом (опционально)
+  function createToneButton(freq, color = null) {
+    const btn = document.createElement('button');
+    btn.className = 'tone-btn';
+    btn.textContent = freq.toFixed(3) + ' Hz';
+    btn.dataset.freq = freq.toFixed(3);
+    if(color) {
+      btn.style.backgroundColor = color;
+      btn.dataset.color = color;
+      btn.style.color = getContrastYIQ(color);
+    }
+
+    function handleClick(e) {
+      e.preventDefault();
+
+      if (modeSelect.value === 'play-hold') return; // клики игнорируем в режиме удержания
+
+      const freq = parseFloat(btn.dataset.freq);
+      const mode = modeSelect.value;
+
+      if (mode === 'play-toggle') {
+        if (activeOscillators.has(freq.toString())) {
+          stopTone(freq);
+        } else {
+          playTone(freq, btn);
+        }
+      } else if (mode === 'edit') {
+        editButtonProperties(btn);
+      } else if (mode === 'delete') {
+        if (activeOscillators.has(freq.toString())) stopTone(freq);
+        btn.remove();
+      }
+    }
+
+    btn.addEventListener('click', handleClick);
+
+    // Обработка play-hold — для мыши
+    btn.addEventListener('mousedown', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        e.preventDefault();
+        const freq = parseFloat(btn.dataset.freq);
+        playTone(freq, btn);
+      }
+    });
+    btn.addEventListener('mouseup', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        e.preventDefault();
+        const freq = parseFloat(btn.dataset.freq);
+        stopTone(freq);
+      }
+    });
+    btn.addEventListener('mouseleave', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        const freq = parseFloat(btn.dataset.freq);
+        stopTone(freq);
+      }
+    });
+
+    // Для touch-устройств play-hold
+    btn.addEventListener('touchstart', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const freq = parseFloat(btn.dataset.freq);
+          playTone(freq, btn);
+        }
+      }
+    }, {passive:false});
+
+    btn.addEventListener('touchend', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const freq = parseFloat(btn.dataset.freq);
+          stopTone(freq);
+        }
+      }
+    }, {passive:false});
+
+    btn.addEventListener('touchcancel', (e) => {
+      if (modeSelect.value === 'play-hold') {
+        e.preventDefault();
+        for (const touch of e.changedTouches) {
+          const freq = parseFloat(btn.dataset.freq);
+          stopTone(freq);
+        }
+      }
+    }, {passive:false});
+
+    return btn;
+  }
+
+  // Редактирование свойств кнопки (частота и цвет)
+  function editButtonProperties(btn) {
+    const oldFreq = parseFloat(btn.dataset.freq);
+    let newFreqStr = prompt('Изменить частоту (>= 1 Hz):', oldFreq);
+    if (newFreqStr !== null) {
+      const newFreq = parseFloat(newFreqStr);
+      if (isNaN(newFreq) || newFreq < 1 || newFreq > 20000) {
+        alert('Неверное значение частоты! Допустимо от 1 до 20000 Hz');
+        return;
+      }
+      if (!freqEquals(newFreq, oldFreq)) {
+        // Проверка на дубликаты частот
+        if ([...buttonsDiv.children].some(otherBtn =>
+          otherBtn !== btn && freqEquals(parseFloat(otherBtn.dataset.freq), newFreq)
+        )) {
+          alert('Кнопка с такой частотой уже существует');
+          return;
+        }
+        if (activeOscillators.has(oldFreq.toString())) stopTone(oldFreq);
+        btn.dataset.freq = newFreq.toFixed(3);
+        btn.textContent = newFreq.toFixed(3) + ' Hz';
+        insertButtonSorted(btn);
+      }
+    }
+    let newColor = prompt('Изменить цвет кнопки (CSS цвет, например #ff0000 или red):', btn.dataset.color || '');
+    if (newColor !== null && newColor.trim() !== '') {
+      btn.style.backgroundColor = newColor.trim();
+      btn.dataset.color = newColor.trim();
+      btn.style.color = getContrastYIQ(newColor.trim());
+    }
+  }
+
+  // Вставить кнопку отсортировано по возрастанию частоты
+  function insertButtonSorted(btn) {
+    const freq = parseFloat(btn.dataset.freq);
+    const buttons = [...buttonsDiv.children].filter(b => b !== btn);
+    let inserted = false;
+    for (let i = 0; i < buttons.length; i++) {
+      const f = parseFloat(buttons[i].dataset.freq);
+      if (freq < f) {
+        buttonsDiv.insertBefore(btn, buttons[i]);
+        inserted = true;
+        break;
+      }
+    }
+    if (!inserted) {
+      buttonsDiv.appendChild(btn);
+    }
+  }
+
+  // Добавление новой кнопки из поля ввода
+  addBtn.onclick = () => {
+    const freq = parseFloat(freqInput.value);
+    if (freq < 1 || freq > 20000 || isNaN(freq)) {
+      alert('Введите частоту от 1 до 20000 Hz');
+      return;
+    }
+    if ([...buttonsDiv.children].some(btn => freqEquals(parseFloat(btn.dataset.freq), freq))) {
+      alert('Кнопка с этой частотой уже существует');
+      return;
+    }
+    const btn = createToneButton(freq);
+    insertButtonSorted(btn);
+    freqInput.value = "440";
+  };
+
+  // При смене режима все звуки останавливаются
   modeSelect.addEventListener('change', () => {
     stopAllTones();
-    // Снимаем выделение со всех кнопок
-    for (const btn of buttonsDiv.children) {
-      btn.classList.remove('active');
-    }
   });
 
-  // При смене типа волны меняем все играющие осцилляторы
+  // При смене формы волны меняем форму всех играющих звуков
   waveTypeSelect.addEventListener('change', () => {
     const newType = waveTypeSelect.value;
     for (const {oscillator} of activeOscillators.values()) {
@@ -212,36 +335,45 @@
     }
   });
 
-  // Добавление кнопки с частотой из поля
-  addBtn.onclick = () => {
-    const freq = parseFloat(freqInput.value);
-    if (freq < 20 || freq > 20000 || isNaN(freq)) {
-      alert('Введите частоту от 20 до 20000 Hz');
-      return;
+  // Контрастный цвет текста (белый или чёрный) для читаемости на цветной кнопке
+  function getContrastYIQ(color) {
+    let r, g, b;
+    if(color[0] === '#') {
+      const c = color.substring(1);
+      if(c.length === 3) {
+        r = parseInt(c[0] + c[0], 16);
+        g = parseInt(c[1] + c[1], 16);
+        b = parseInt(c[2] + c[2], 16);
+      } else {
+        r = parseInt(c.substring(0,2), 16);
+        g = parseInt(c.substring(2,4), 16);
+        b = parseInt(c.substring(4,6), 16);
+      }
+    } else {
+      // Примерное приближение для ключевых слов цвета — выбираем белый по умолчанию
+      return '#fff';
     }
-    const exists = [...buttonsDiv.children].some(btn => parseFloat(btn.dataset.freq) === freq);
-    if (exists) {
-      alert('Кнопка с этой частотой уже существует');
-      return;
-    }
-    const btn = createToneButton(freq);
-    buttonsDiv.appendChild(btn);
-    freqInput.value = 440;
-  };
+    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return (yiq >= 128) ? '#000' : '#fff';
+  }
 
   // Инициализация кнопок по умолчанию
   [261.63, 329.63, 392, 440, 523.25].forEach(freq => {
-    buttonsDiv.appendChild(createToneButton(freq));
+    const btn = createToneButton(freq);
+    insertButtonSorted(btn);
   });
 </script>
 
 <p style="font-size:0.8em; margin-top:1em; color:#888;">
-* Режим &quot;Воспроизведение&quot; — клик вкл/выкл звук (можно несколько звуков одновременно)<br>
-* Режим &quot;Редактирование&quot; — клик меняет частоту кнопки<br>
-* Режим &quot;Удаление&quot; — клик удаляет кнопку<br>
-* При смене режима все звуки прекращаются, выделения сбрасываются<br>
-* Добавляй частоты в поле ниже<br>
-* Можно сменить форму волны осциллятора сверху
+* Режим "Воспроизведение (зажатие / переключение)" — по клику звук вкл/выкл (можно нажать несколько кнопок одновременно)<br>
+* Режим "Воспроизведение (только пока удерживаешь)" — звук звучит только пока кнопка нажата (мышь или палец), поддержка одновременных удержаний<br>
+* Режим "Редактирование" — по клику можно менять частоту и цвет кнопки<br>
+* Режим "Удаление" — по клику удаляется кнопка<br>
+* При смене режима все звуки прерываются<br>
+* Кнопки автоматически сортируются по возрастанию частоты при добавлении и изменении<br>
+* Частоты можно задавать от 1 до 20000 Hz<br>
+* Можно менять форму волны для всех играющих звуков<br>
+* Правый клик и двойной клик отключены для предотвращения ошибок<br>
 </p>
 
 </body>
