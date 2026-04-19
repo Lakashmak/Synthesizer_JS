@@ -1,0 +1,75 @@
+body {
+  font-family: sans-serif;
+  margin: 1em;
+  background: #222;
+  color: #eee;
+}
+h1 {
+  margin-bottom: 0.5em;
+}
+#waveType, #waveType2, #waveType3, #waveType4, #modeSelect {
+  margin-bottom: 1em;
+  margin-right: 0.5em;
+}
+#buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+button.tone-btn {
+  padding: 0.6em 1em;
+  background: #444;
+  border: none;
+  border-radius: 4px;
+  color: #eee;
+  cursor: pointer;
+  user-select: none;
+  min-width: 70px;
+  text-align: center;
+  transition: background-color 0.15s;
+}
+button.tone-btn.active {
+  background: #0a0;
+  color: #0f0;
+}
+button.tone-btn:hover {
+  background: #666;
+}
+#addFreqForm {
+  margin-top: 1em;
+  display: flex;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+#addFreqForm input, #addFreqForm button, #playBtn, #stopBtn {
+  font-size: 1em;
+  padding: 0.4em;
+  border-radius: 4px;
+  border: none;
+}
+#addFreqForm input[type="number"] {
+  width: 100px;
+}
+#addFreqForm button, #playBtn, #stopBtn {
+  background: #06c;
+  color: white;
+  cursor: pointer;
+  min-width: 80px;
+}
+#addFreqForm button:hover {
+  background: #09f;
+}
+label {
+  user-select: none;
+}
+#label1 {
+  white-space: pre-wrap;  /* → реальный перенос строки! */
+  font-family: monospace; /* красивые пробелы */
+}
+#progressBar {
+  width: 100%;
+  height: 24px;
+  border-radius: 12px;
+  background: #444;
+  accent-color: #00eeee; 
+}
